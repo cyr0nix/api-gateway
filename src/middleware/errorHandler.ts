@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { config } from "../config/index.js";
+import { logger } from "../observability/logger.js";
 
 export class AppError extends Error {
   statusCode: number;
@@ -22,15 +23,20 @@ export const errorHandler = (
   const statusCode = err instanceof AppError ? err.statusCode : 500;
   const message = err.message || "Internal server error";
 
-  console.error(`[Error] ${req.method} ${req.path} - ${message}`);
-
-  if (config.nodeEnv === "development") {
-    console.error(err.stack);
-  }
+  logger.error(
+    {
+      err,
+      method: req.method,
+      path: req.path,
+      requestId: req.headers["x-request-id"],
+    },
+    `[Error] ${statusCode} ${message}`
+  );
 
   res.status(statusCode).json({
     error: message,
-    ...(config.nodeEnv === "development" && { stack: err.stack }),
+    // only leak stack traces in dev
+    ...(!config.isProd && { stack: err.stack }),
   });
 };
 

@@ -1,20 +1,15 @@
 import { Router } from "express";
-import { createServiceProxy, serviceRegistry } from "../services/proxy.js";
+import { createServiceProxy } from "../services/proxy.js";
 import { authenticate, authorize } from "../middleware/auth.js";
 import { rateLimiter } from "../middleware/rateLimiter.js";
 import { cache } from "../middleware/cache.js";
 
 const router = Router();
 
-// health check
-router.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
-});
-
-// public routes - no auth needed
+// public routes - no auth needed, cached and generously rate limited
 router.use(
   "/api/products",
-  rateLimiter({ max: 200 }),
+  rateLimiter({ max: 200, keyPrefix: "rl:products" }),
   cache({ ttl: 60 }),
   createServiceProxy("products")
 );
@@ -22,14 +17,14 @@ router.use(
 // protected routes
 router.use(
   "/api/users",
-  rateLimiter({ max: 100 }),
+  rateLimiter({ max: 100, keyPrefix: "rl:users" }),
   authenticate,
   createServiceProxy("users")
 );
 
 router.use(
   "/api/orders",
-  rateLimiter({ max: 50 }),
+  rateLimiter({ max: 50, keyPrefix: "rl:orders" }),
   authenticate,
   createServiceProxy("orders")
 );
@@ -37,9 +32,9 @@ router.use(
 // admin only routes
 router.use(
   "/api/admin",
+  rateLimiter({ max: 30, keyPrefix: "rl:admin" }),
   authenticate,
   authorize("admin"),
-  rateLimiter({ max: 30 }),
   (req, res) => {
     res.json({ message: "Admin area", user: req.user });
   }
